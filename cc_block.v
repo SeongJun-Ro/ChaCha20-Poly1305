@@ -1,382 +1,435 @@
 module cc_block (
 	input				i_clk, i_rstn,
+	input				i_start,
+	
 	input		[255:0]	i_key,
 	input		[95:0]	i_non,
 	input		[31:0]	i_cnt,
-	input				i_qr,
 	
-	output	reg	[511:0]	o_block,
+	output	reg	[511:0]	o_stream,
 	output	wire		o_done
 );
 
 	// ***** local parameter definition *****
-
-	// fsm
-	parameter IDLE		= 3'd0;
-	parameter RDY		= 3'd1;
-	parameter R_CALC	= 3'd2;
-	parameter ADD		= 3'd3;
-	parameter DONE		= 3'd4;
-
-	// constant
+	// constant / block 0,1,2,3
 	parameter CONSTANT0 = 32'h61707865;
 	parameter CONSTANT1 = 32'h3320646e;
 	parameter CONSTANT2 = 32'h79622d32;
 	parameter CONSTANT3 = 32'h6b206574;
+	// state
+	parameter IDLE	= 3'd0;
+	parameter RDY	= 3'd1;
+	parameter RND	= 3'd2;
+	parameter ADD	= 3'd3;
+	parameter DONE	= 3'd4;
 
 	// ***** local register definition *****
-	reg	[2:0]	r_fsm;
-	reg	[3:0]	r_cnt_calc;  // 12
-	reg	[4:0]	r_cnt_r;  // 20
-	reg [31:0]	r_state	[15:0];
-	reg [31:0]	r_block	[15:0];
+	reg [2:0] r_fsm;
+	reg [4:0] r_cnt_rnd;
+	reg [3:0] r_cnt_calc;
+	reg		[31:0]	r_state0, r_state1, r_state2, r_state3, r_state4, r_state5, r_state6, r_state7, r_state8, r_state9, r_state10, r_state11, r_state12, r_state13, r_state14, r_state15;
+	reg		[31:0]	r_block0, r_block1, r_block2, r_block3, r_block4, r_block5, r_block6, r_block7, r_block8, r_block9, r_block10, r_block11, r_block12, r_block13, r_block14, r_block15;
 
 	// ***** local wire definition *****
+	wire	[31:0]	w_block4, w_block5, w_block6, w_block7, w_block8, w_block9, w_block10, w_block11, w_block13, w_block14, w_block15;
+
+	assign	w_block4	= i_key[31:0];
+	assign	w_block5	= i_key[63:32];
+	assign	w_block6	= i_key[95:64];
+	assign	w_block7	= i_key[127:96];
+	assign	w_block8	= i_key[159:128];
+	assign	w_block9	= i_key[191:160];
+	assign	w_block10	= i_key[223:192];
+	assign	w_block11	= i_key[255:224];
+	assign	w_block13	= i_non[31:0];
+	assign	w_block14	= i_non[63:32];
+	assign	w_block15	= i_non[95:64];
+
 	assign o_done = (r_fsm == DONE);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 	// Explanation of always statement
-	
-	// [2:0] r_fsm
+
 	always @(posedge i_clk, negedge i_rstn) begin
-		if(!i_rstn)
-			r_fsm <= 3'd0;
+		if (!i_rstn)
+			r_fsm <= IDLE;
 		else
 			case(r_fsm)
-				IDLE	: r_fsm <= (i_qr) ? RDY	: IDLE;
-				RDY		: r_fsm <= R_CALC;
-				R_CALC	: r_fsm <= ((r_cnt_r==5'd20-1) && (r_cnt_calc==5'd12-1)) ? ADD : R_CALC;
+				IDLE	: r_fsm <= (i_start) ? RDY : IDLE;
+				RDY		: r_fsm <= RND;
+				RND		: r_fsm <= (r_cnt_rnd == 5'd19 && r_cnt_calc == 4'd11) ? ADD : RND;
 				ADD		: r_fsm <= DONE;
-				DONE	: r_fsm <= (i_qr) ? RDY	: IDLE;
+				DONE	: r_fsm <= IDLE;
+				default : r_fsm	<= IDLE;
 			endcase
 	end
-	
-	// [3:0] r_cnt_calc
-	// 12 cnt
+
+	// count 20 round
 	always @(posedge i_clk, negedge i_rstn) begin
-		if(!i_rstn)
+		if (!i_rstn)
+			r_cnt_rnd <= 5'd0;
+		else if (r_fsm == IDLE)
+			r_cnt_rnd <= 5'd0;
+		else if (r_fsm == RND)
+			r_cnt_rnd <= (r_cnt_calc == 4'd11) ? r_cnt_rnd + 1'b1 : r_cnt_rnd;
+		else
+			r_cnt_rnd <= r_cnt_rnd;
+	end
+	
+	// count 12 calc
+	always @(posedge i_clk, negedge i_rstn) begin
+		if (!i_rstn)
 			r_cnt_calc <= 4'd0;
-		else if(r_fsm==R_CALC)
-			r_cnt_calc <= (r_cnt_calc == 4'd12-1) ? 4'd0 : r_cnt_calc + 1'b1;
-//		else
-//			r_cnt_calc <= r_cnt_calc;
-	end
-	
-	// [4:0] r_cnt_r
-	// cnt 20
-	always @(posedge i_clk, negedge i_rstn) begin
-		if(!i_rstn)
-			r_cnt_r <=	5'd0;
-		else if(r_fsm==R_CALC)
-//			r_cnt_r <=	(r_cnt_r == 5'd20-1) ? 5'd0 : r_cnt_r + 1'b1;
-			r_cnt_r <=	(r_cnt_calc == 4'd12-1) ?
-						(r_cnt_r == 5'd20-1) ? 5'd0 : r_cnt_r + 1'b1
-						: r_cnt_r;
-//		else
-//			r_cnt_r <= r_cnt_r;
-	end
-	
-
-	// [31:0] r_state [15:0];
-	always @(posedge i_clk, negedge i_rstn) begin
-		if(!i_rstn) begin
-			r_state[0]	<= 32'd0;
-			r_state[1]	<= 32'd0;
-			r_state[2]	<= 32'd0;
-			r_state[3]	<= 32'd0;
-			r_state[4]	<= 32'd0;
-			r_state[5]	<= 32'd0;
-			r_state[6]	<= 32'd0;
-			r_state[7]	<= 32'd0;
-			r_state[8]	<= 32'd0;
-			r_state[9]	<= 32'd0;
-			r_state[10]	<= 32'd0;
-			r_state[11]	<= 32'd0;
-			r_state[12]	<= 32'd0;
-			r_state[13]	<= 32'd0;
-			r_state[14]	<= 32'd0;
-			r_state[15]	<= 32'd0;
-		end
-		else if(r_fsm==RDY) begin  // init block
-			r_state[0]	<= CONSTANT0;
-			r_state[1]	<= CONSTANT1;
-			r_state[2]	<= CONSTANT2;
-			r_state[3]	<= CONSTANT3;
-			r_state[4]	<= i_key[31:0];
-			r_state[5]	<= i_key[63:32];
-			r_state[6]	<= i_key[95:64];
-			r_state[7]	<= i_key[127:96];
-			r_state[8]	<= i_key[159:128];
-			r_state[9]	<= i_key[191:160];
-			r_state[10]	<= i_key[223:192];
-			r_state[11]	<= i_key[255:224];
-			r_state[12]	<= i_cnt;
-			r_state[13]	<= i_non[31:0];
-			r_state[14]	<= i_non[63:32];
-			r_state[15]	<= i_non[95:64];
-		end
+		else if (r_fsm == IDLE)
+			r_cnt_calc <= 4'd0;
+		else if (r_fsm == RND)
+			r_cnt_calc <= (r_cnt_calc == 4'd11) ? 4'd0 : r_cnt_calc + 1'b1;
+		else
+			r_cnt_calc <= r_cnt_calc;
 	end
 
-	// [31:0] r_block [15:0];
+	// save init state (key, nonce, count)
 	always @(posedge i_clk, negedge i_rstn) begin
-		if(!i_rstn) begin
-			r_block[0]	<= 32'd0;
-			r_block[1]	<= 32'd0;
-			r_block[2]	<= 32'd0;
-			r_block[3]	<= 32'd0;
-			r_block[4]	<= 32'd0;
-			r_block[5]	<= 32'd0;
-			r_block[6]	<= 32'd0;
-			r_block[7]	<= 32'd0;
-			r_block[8]	<= 32'd0;
-			r_block[9]	<= 32'd0;
-			r_block[10]	<= 32'd0;
-			r_block[11]	<= 32'd0;
-			r_block[12]	<= 32'd0;
-			r_block[13]	<= 32'd0;
-			r_block[14]	<= 32'd0;
-			r_block[15]	<= 32'd0;
+		if (!i_rstn) begin
+			r_state0	<= 32'd0;
+			r_state1	<= 32'd0;
+			r_state2	<= 32'd0;
+			r_state3	<= 32'd0;
+			r_state4	<= 32'd0;
+			r_state5	<= 32'd0;
+			r_state6	<= 32'd0;
+			r_state7	<= 32'd0;
+			r_state8	<= 32'd0;
+			r_state9	<= 32'd0;
+			r_state10	<= 32'd0;
+			r_state11	<= 32'd0;
+			r_state12	<= 32'd0;
+			r_state13	<= 32'd0;
+			r_state14	<= 32'd0;
+			r_state15	<= 32'd0;
 		end
-		else if(r_fsm==RDY) begin  // init block
-			r_block[0]	<= CONSTANT0;
-			r_block[1]	<= CONSTANT1;
-			r_block[2]	<= CONSTANT2;
-			r_block[3]	<= CONSTANT3;
-			r_block[4]	<= i_key[31:0];
-			r_block[5]	<= i_key[63:32];
-			r_block[6]	<= i_key[95:64];
-			r_block[7]	<= i_key[127:96];
-			r_block[8]	<= i_key[159:128];
-			r_block[9]	<= i_key[191:160];
-			r_block[10]	<= i_key[223:192];
-			r_block[11]	<= i_key[255:224];
-			r_block[12]	<= i_cnt;
-			r_block[13]	<= i_non[31:0];
-			r_block[14]	<= i_non[63:32];
-			r_block[15]	<= i_non[95:64];
+		else if (r_fsm == RDY) begin
+			r_state0	<= CONSTANT0;
+			r_state1	<= CONSTANT1;
+			r_state2	<= CONSTANT2;
+			r_state3	<= CONSTANT3;
+			r_state4	<= w_block4;
+			r_state5	<= w_block5;
+			r_state6	<= w_block6;
+			r_state7	<= w_block7;
+			r_state8	<= w_block8;
+			r_state9	<= w_block9;
+			r_state10	<= w_block10;
+			r_state11	<= w_block11;
+			r_state12	<= 
+			r_state13	<= w_block13;
+			r_state14	<= w_block14;
+			r_state15	<= w_block15;
 		end
-		else if(r_fsm==R_CALC) begin
-			if (r_cnt_r % 2==0)  // odd round
+//		else begin
+//			r_state0	<= r_state0;
+//			r_state1	<= r_state1;
+//			r_state2	<= r_state2;
+//			r_state3	<= r_state3;
+//			r_state4	<= r_state4;
+//			r_state5	<= r_state5;
+//			r_state6	<= r_state6;
+//			r_state7	<= r_state7;
+//			r_state8	<= r_state8;
+//			r_state9	<= r_state9;
+//			r_state10	<= r_state10;
+//			r_state11	<= r_state11;
+//			r_state12	<= r_state12;
+//			r_state13	<= r_state13;
+//			r_state14	<= r_state14;
+//			r_state15	<= r_state15;
+//		end
+	end
+
+	// calc quarter round & block += state
+	always @(posedge i_clk, negedge i_rstn) begin
+		if (!i_rstn) begin
+			r_block0	<= 32'd0;
+			r_block1	<= 32'd0;
+			r_block2	<= 32'd0;
+			r_block3	<= 32'd0;
+			r_block4	<= 32'd0;
+			r_block5	<= 32'd0;
+			r_block6	<= 32'd0;
+			r_block7	<= 32'd0;
+			r_block8	<= 32'd0;
+			r_block9	<= 32'd0;
+			r_block10	<= 32'd0;
+			r_block11	<= 32'd0;
+			r_block12	<= 32'd0;
+			r_block13	<= 32'd0;
+			r_block14	<= 32'd0;
+			r_block15	<= 32'd0;
+		end
+		else if (r_fsm == RDY) begin
+			r_block0	<= CONSTANT0;
+			r_block1	<= CONSTANT1;
+			r_block2	<= CONSTANT2;
+			r_block3	<= CONSTANT3;
+			r_block4	<= w_block4;
+			r_block5	<= w_block5;
+			r_block6	<= w_block6;
+			r_block7	<= w_block7;
+			r_block8	<= w_block8;
+			r_block9	<= w_block9;
+			r_block10	<= w_block10;
+			r_block11	<= w_block11;
+			r_block12	<= i_cnt;
+			r_block13	<= w_block13;
+			r_block14	<= w_block14;
+			r_block15	<= w_block15;
+		end
+		else if(r_fsm==RND) begin
+			if (r_cnt_rnd % 2==0)  // odd round
 				case (r_cnt_calc)
 					4'd0: begin  // a+=b
-						r_block[0]	<= r_block[0] + r_block[4];
-						r_block[1]	<= r_block[1] + r_block[5];
-						r_block[2]	<= r_block[2] + r_block[6];
-						r_block[3]	<= r_block[3] + r_block[7];
+						r_block0	<= r_block0 + r_block4;
+						r_block1	<= r_block1 + r_block5;
+						r_block2	<= r_block2 + r_block6;
+						r_block3	<= r_block3 + r_block7;
 					end
 					4'd1: begin  // d^=a
-						r_block[12]	<= r_block[12] ^ r_block[0];
-						r_block[13]	<= r_block[13] ^ r_block[1];
-						r_block[14]	<= r_block[14] ^ r_block[2];
-						r_block[15]	<= r_block[15] ^ r_block[3];
+						r_block12	<= r_block12 ^ r_block0;
+						r_block13	<= r_block13 ^ r_block1;
+						r_block14	<= r_block14 ^ r_block2;
+						r_block15	<= r_block15 ^ r_block3;
 					end
 					4'd2: begin  // d<<<=16
-						r_block[12]	<= {r_block[12][15:0],r_block[12][31:16]};
-						r_block[13]	<= {r_block[13][15:0],r_block[13][31:16]};
-						r_block[14]	<= {r_block[14][15:0],r_block[14][31:16]};
-						r_block[15]	<= {r_block[15][15:0],r_block[15][31:16]};
+						r_block12	<= {r_block12[15:0],r_block12[31:16]};
+						r_block13	<= {r_block13[15:0],r_block13[31:16]};
+						r_block14	<= {r_block14[15:0],r_block14[31:16]};
+						r_block15	<= {r_block15[15:0],r_block15[31:16]};
 					end
 					4'd3: begin  // c+=d
-						r_block[8]	<= r_block[8]  + r_block[12];
-						r_block[9]	<= r_block[9]  + r_block[13];
-						r_block[10]	<= r_block[10] + r_block[14];
-						r_block[11]	<= r_block[11] + r_block[15];
+						r_block8	<= r_block8  + r_block12;
+						r_block9	<= r_block9  + r_block13;
+						r_block10	<= r_block10 + r_block14;
+						r_block11	<= r_block11 + r_block15;
 					end
 					4'd4: begin  // b^=c
-						r_block[4]	<= r_block[4] ^ r_block[8];
-						r_block[5]	<= r_block[5] ^ r_block[9];
-						r_block[6]	<= r_block[6] ^ r_block[10];
-						r_block[7]	<= r_block[7] ^ r_block[11];
+						r_block4	<= r_block4 ^ r_block8;
+						r_block5	<= r_block5 ^ r_block9;
+						r_block6	<= r_block6 ^ r_block10;
+						r_block7	<= r_block7 ^ r_block11;
 					end
 					4'd5: begin  // b<<<=12
-						r_block[4]	<= {r_block[4][19:0],r_block[4][31:20]};
-						r_block[5]	<= {r_block[5][19:0],r_block[5][31:20]};
-						r_block[6]	<= {r_block[6][19:0],r_block[6][31:20]};
-						r_block[7]	<= {r_block[7][19:0],r_block[7][31:20]};
+						r_block4	<= {r_block4[19:0],r_block4[31:20]};
+						r_block5	<= {r_block5[19:0],r_block5[31:20]};
+						r_block6	<= {r_block6[19:0],r_block6[31:20]};
+						r_block7	<= {r_block7[19:0],r_block7[31:20]};
 					end
 					4'd6: begin  // a+=b
-						r_block[0]	<= r_block[0] + r_block[4];
-						r_block[1]	<= r_block[1] + r_block[5];
-						r_block[2]	<= r_block[2] + r_block[6];
-						r_block[3]	<= r_block[3] + r_block[7];
+						r_block0	<= r_block0 + r_block4;
+						r_block1	<= r_block1 + r_block5;
+						r_block2	<= r_block2 + r_block6;
+						r_block3	<= r_block3 + r_block7;
 					end
 					4'd7: begin  // d^=a
-						r_block[12]	<= r_block[12] ^ r_block[0];
-						r_block[13]	<= r_block[13] ^ r_block[1];
-						r_block[14]	<= r_block[14] ^ r_block[2];
-						r_block[15]	<= r_block[15] ^ r_block[3];
+						r_block12	<= r_block12 ^ r_block0;
+						r_block13	<= r_block13 ^ r_block1;
+						r_block14	<= r_block14 ^ r_block2;
+						r_block15	<= r_block15 ^ r_block3;
 					end
 					4'd8: begin  // d<<<=8
-						r_block[12]	<= {r_block[12][23:0],r_block[12][31:24]};
-						r_block[13]	<= {r_block[13][23:0],r_block[13][31:24]};
-						r_block[14]	<= {r_block[14][23:0],r_block[14][31:24]};
-						r_block[15]	<= {r_block[15][23:0],r_block[15][31:24]};
+						r_block12	<= {r_block12[23:0],r_block12[31:24]};
+						r_block13	<= {r_block13[23:0],r_block13[31:24]};
+						r_block14	<= {r_block14[23:0],r_block14[31:24]};
+						r_block15	<= {r_block15[23:0],r_block15[31:24]};
 					end
 					4'd9: begin  // c+=d
-						r_block[8]	<= r_block[8]  + r_block[12];
-						r_block[9]	<= r_block[9]  + r_block[13];
-						r_block[10]	<= r_block[10] + r_block[14];
-						r_block[11]	<= r_block[11] + r_block[15];
+						r_block8	<= r_block8  + r_block12;
+						r_block9	<= r_block9  + r_block13;
+						r_block10	<= r_block10 + r_block14;
+						r_block11	<= r_block11 + r_block15;
 					end
 					4'd10: begin  // b^=c
-						r_block[4]	<= r_block[4] ^ r_block[8];
-						r_block[5]	<= r_block[5] ^ r_block[9];
-						r_block[6]	<= r_block[6] ^ r_block[10];
-						r_block[7]	<= r_block[7] ^ r_block[11];
+						r_block4	<= r_block4 ^ r_block8;
+						r_block5	<= r_block5 ^ r_block9;
+						r_block6	<= r_block6 ^ r_block10;
+						r_block7	<= r_block7 ^ r_block11;
 					end
 					4'd11: begin  // b<<<=7
-						r_block[4]	<= {r_block[4][24:0],r_block[4][31:25]};
-						r_block[5]	<= {r_block[5][24:0],r_block[5][31:25]};
-						r_block[6]	<= {r_block[6][24:0],r_block[6][31:25]};
-						r_block[7]	<= {r_block[7][24:0],r_block[7][31:25]};
+						r_block4	<= {r_block4[24:0],r_block4[31:25]};
+						r_block5	<= {r_block5[24:0],r_block5[31:25]};
+						r_block6	<= {r_block6[24:0],r_block6[31:25]};
+						r_block7	<= {r_block7[24:0],r_block7[31:25]};
 					end
 					default: begin
-						r_block[0]	<= 32'd0;
-						r_block[1]	<= 32'd0;
-						r_block[2]	<= 32'd0;
-						r_block[3]	<= 32'd0;
-						r_block[4]	<= 32'd0;
-						r_block[5]	<= 32'd0;
-						r_block[6]	<= 32'd0;
-						r_block[7]	<= 32'd0;
-						r_block[8]	<= 32'd0;
-						r_block[9]	<= 32'd0;
-						r_block[10]	<= 32'd0;
-						r_block[11]	<= 32'd0;
-						r_block[12]	<= 32'd0;
-						r_block[13]	<= 32'd0;
-						r_block[14]	<= 32'd0;
-						r_block[15]	<= 32'd0;
+						r_block0	<= 32'd0;
+						r_block1	<= 32'd0;
+						r_block2	<= 32'd0;
+						r_block3	<= 32'd0;
+						r_block4	<= 32'd0;
+						r_block5	<= 32'd0;
+						r_block6	<= 32'd0;
+						r_block7	<= 32'd0;
+						r_block8	<= 32'd0;
+						r_block9	<= 32'd0;
+						r_block10	<= 32'd0;
+						r_block11	<= 32'd0;
+						r_block12	<= 32'd0;
+						r_block13	<= 32'd0;
+						r_block14	<= 32'd0;
+						r_block15	<= 32'd0;
 					end
 				endcase
 			else  // even round
 				case (r_cnt_calc)
 					4'd0: begin  // a+=b
-						r_block[0]	<= r_block[0] + r_block[5];
-						r_block[1]	<= r_block[1] + r_block[6];
-						r_block[2]	<= r_block[2] + r_block[7];
-						r_block[3]	<= r_block[3] + r_block[4];
+						r_block0	<= r_block0 + r_block5;
+						r_block1	<= r_block1 + r_block6;
+						r_block2	<= r_block2 + r_block7;
+						r_block3	<= r_block3 + r_block4;
 					end
 					4'd1: begin  // d^=a
-						r_block[15]	<= r_block[15] ^ r_block[0];
-						r_block[12]	<= r_block[12] ^ r_block[1];
-						r_block[13]	<= r_block[13] ^ r_block[2];
-						r_block[14]	<= r_block[14] ^ r_block[3];
+						r_block15	<= r_block15 ^ r_block0;
+						r_block12	<= r_block12 ^ r_block1;
+						r_block13	<= r_block13 ^ r_block2;
+						r_block14	<= r_block14 ^ r_block3;
 					end
 					4'd2: begin  // d<<<=16
-						r_block[15]	<= {r_block[15][15:0],r_block[15][31:16]};
-						r_block[12]	<= {r_block[12][15:0],r_block[12][31:16]};
-						r_block[13]	<= {r_block[13][15:0],r_block[13][31:16]};
-						r_block[14]	<= {r_block[14][15:0],r_block[14][31:16]};
+						r_block15	<= {r_block15[15:0],r_block15[31:16]};
+						r_block12	<= {r_block12[15:0],r_block12[31:16]};
+						r_block13	<= {r_block13[15:0],r_block13[31:16]};
+						r_block14	<= {r_block14[15:0],r_block14[31:16]};
 					end
 					4'd3: begin  // c+=d
-						r_block[10]	<= r_block[10] + r_block[15];
-						r_block[11]	<= r_block[11] + r_block[12];
-						r_block[8]	<= r_block[8]  + r_block[13];
-						r_block[9]	<= r_block[9]  + r_block[14];
+						r_block10	<= r_block10 + r_block15;
+						r_block11	<= r_block11 + r_block12;
+						r_block8	<= r_block8  + r_block13;
+						r_block9	<= r_block9  + r_block14;
 					end
 					4'd4: begin  // b^=c
-						r_block[5]	<= r_block[5] ^ r_block[10];
-						r_block[6]	<= r_block[6] ^ r_block[11];
-						r_block[7]	<= r_block[7] ^ r_block[8];
-						r_block[4]	<= r_block[4] ^ r_block[9];
+						r_block5	<= r_block5 ^ r_block10;
+						r_block6	<= r_block6 ^ r_block11;
+						r_block7	<= r_block7 ^ r_block8;
+						r_block4	<= r_block4 ^ r_block9;
 					end
 					4'd5: begin  // b<<<=12
-						r_block[5]	<= {r_block[5][19:0],r_block[5][31:20]};
-						r_block[6]	<= {r_block[6][19:0],r_block[6][31:20]};
-						r_block[7]	<= {r_block[7][19:0],r_block[7][31:20]};
-						r_block[4]	<= {r_block[4][19:0],r_block[4][31:20]};
+						r_block5	<= {r_block5[19:0],r_block5[31:20]};
+						r_block6	<= {r_block6[19:0],r_block6[31:20]};
+						r_block7	<= {r_block7[19:0],r_block7[31:20]};
+						r_block4	<= {r_block4[19:0],r_block4[31:20]};
 					end
 					4'd6: begin  // a+=b
-						r_block[0]	<= r_block[0] + r_block[5];
-						r_block[1]	<= r_block[1] + r_block[6];
-						r_block[2]	<= r_block[2] + r_block[7];
-						r_block[3]	<= r_block[3] + r_block[4];
+						r_block0	<= r_block0 + r_block5;
+						r_block1	<= r_block1 + r_block6;
+						r_block2	<= r_block2 + r_block7;
+						r_block3	<= r_block3 + r_block4;
 					end
 					4'd7: begin  // d^=a
-						r_block[15]	<= r_block[15] ^ r_block[0];
-						r_block[12]	<= r_block[12] ^ r_block[1];
-						r_block[13]	<= r_block[13] ^ r_block[2];
-						r_block[14]	<= r_block[14] ^ r_block[3];
+						r_block15	<= r_block15 ^ r_block0;
+						r_block12	<= r_block12 ^ r_block1;
+						r_block13	<= r_block13 ^ r_block2;
+						r_block14	<= r_block14 ^ r_block3;
 					end
 					4'd8: begin  // d<<<=8
-						r_block[15]	<= {r_block[15][23:0],r_block[15][31:24]};
-						r_block[12]	<= {r_block[12][23:0],r_block[12][31:24]};
-						r_block[13]	<= {r_block[13][23:0],r_block[13][31:24]};
-						r_block[14]	<= {r_block[14][23:0],r_block[14][31:24]};
+						r_block15	<= {r_block15[23:0],r_block15[31:24]};
+						r_block12	<= {r_block12[23:0],r_block12[31:24]};
+						r_block13	<= {r_block13[23:0],r_block13[31:24]};
+						r_block14	<= {r_block14[23:0],r_block14[31:24]};
 					end
 					4'd9: begin  // c+=d
-						r_block[10]	<= r_block[10] + r_block[15];
-						r_block[11]	<= r_block[11] + r_block[12];
-						r_block[8]	<= r_block[8]  + r_block[13];
-						r_block[9]	<= r_block[9]  + r_block[14];
+						r_block10	<= r_block10 + r_block15;
+						r_block11	<= r_block11 + r_block12;
+						r_block8	<= r_block8  + r_block13;
+						r_block9	<= r_block9  + r_block14;
 					end
 					4'd10: begin  // b^=c
-						r_block[5]	<= r_block[5] ^ r_block[10];
-						r_block[6]	<= r_block[6] ^ r_block[11];
-						r_block[7]	<= r_block[7] ^ r_block[8];
-						r_block[4]	<= r_block[4] ^ r_block[9];
+						r_block5	<= r_block5 ^ r_block10;
+						r_block6	<= r_block6 ^ r_block11;
+						r_block7	<= r_block7 ^ r_block8;
+						r_block4	<= r_block4 ^ r_block9;
 					end
 					4'd11: begin  // b<<<=7
-						r_block[5]	<= {r_block[5][24:0],r_block[5][31:25]};
-						r_block[6]	<= {r_block[6][24:0],r_block[6][31:25]};
-						r_block[7]	<= {r_block[7][24:0],r_block[7][31:25]};
-						r_block[4]	<= {r_block[4][24:0],r_block[4][31:25]};
+						r_block5	<= {r_block5[24:0],r_block5[31:25]};
+						r_block6	<= {r_block6[24:0],r_block6[31:25]};
+						r_block7	<= {r_block7[24:0],r_block7[31:25]};
+						r_block4	<= {r_block4[24:0],r_block4[31:25]};
 					end
 					default: begin
-						r_block[0]	<= 32'd0;
-						r_block[1]	<= 32'd0;
-						r_block[2]	<= 32'd0;
-						r_block[3]	<= 32'd0;
-						r_block[4]	<= 32'd0;
-						r_block[5]	<= 32'd0;
-						r_block[6]	<= 32'd0;
-						r_block[7]	<= 32'd0;
-						r_block[8]	<= 32'd0;
-						r_block[9]	<= 32'd0;
-						r_block[10]	<= 32'd0;
-						r_block[11]	<= 32'd0;
-						r_block[12]	<= 32'd0;
-						r_block[13]	<= 32'd0;
-						r_block[14]	<= 32'd0;
-						r_block[15]	<= 32'd0;
+						r_block0	<= 32'd0;
+						r_block1	<= 32'd0;
+						r_block2	<= 32'd0;
+						r_block3	<= 32'd0;
+						r_block4	<= 32'd0;
+						r_block5	<= 32'd0;
+						r_block6	<= 32'd0;
+						r_block7	<= 32'd0;
+						r_block8	<= 32'd0;
+						r_block9	<= 32'd0;
+						r_block10	<= 32'd0;
+						r_block11	<= 32'd0;
+						r_block12	<= 32'd0;
+						r_block13	<= 32'd0;
+						r_block14	<= 32'd0;
+						r_block15	<= 32'd0;
 					end
 				endcase
 		end
 		else if(r_fsm==ADD) begin
-			r_block[0]	<= r_block[0]  + r_state[0];
-			r_block[1]	<= r_block[1]  + r_state[1];
-			r_block[2]	<= r_block[2]  + r_state[2];
-			r_block[3]	<= r_block[3]  + r_state[3];
-			r_block[4]	<= r_block[4]  + r_state[4];
-			r_block[5]	<= r_block[5]  + r_state[5];
-			r_block[6]	<= r_block[6]  + r_state[6];
-			r_block[7]	<= r_block[7]  + r_state[7];
-			r_block[8]	<= r_block[8]  + r_state[8];
-			r_block[9]	<= r_block[9]  + r_state[9];
-			r_block[10]	<= r_block[10] + r_state[10];
-			r_block[11]	<= r_block[11] + r_state[11];
-			r_block[12]	<= r_block[12] + r_state[12];
-			r_block[13]	<= r_block[13] + r_state[13];
-			r_block[14]	<= r_block[14] + r_state[14];
-			r_block[15]	<= r_block[15] + r_state[15];
+			r_block0	<= r_block0  + r_state0;
+			r_block1	<= r_block1  + r_state1;
+			r_block2	<= r_block2  + r_state2;
+			r_block3	<= r_block3  + r_state3;
+			r_block4	<= r_block4  + r_state4;
+			r_block5	<= r_block5  + r_state5;
+			r_block6	<= r_block6  + r_state6;
+			r_block7	<= r_block7  + r_state7;
+			r_block8	<= r_block8  + r_state8;
+			r_block9	<= r_block9  + r_state9;
+			r_block10	<= r_block10 + r_state10;
+			r_block11	<= r_block11 + r_state11;
+			r_block12	<= r_block12 + r_state12;
+			r_block13	<= r_block13 + r_state13;
+			r_block14	<= r_block14 + r_state14;
+			r_block15	<= r_block15 + r_state15;
 		end
-//		else
-//			r_block <= r_block;
+//		else begin
+//			r_block0	<= r_block0;
+//			r_block1	<= r_block1;
+//			r_block2	<= r_block2;
+//			r_block3	<= r_block3;
+//			r_block4	<= r_block4;
+//			r_block5	<= r_block5;
+//			r_block6	<= r_block6;
+//			r_block7	<= r_block7;
+//			r_block8	<= r_block8;
+//			r_block9	<= r_block9;
+//			r_block10	<= r_block10;
+//			r_block11	<= r_block11;
+//			r_block12	<= r_block12;
+//			r_block13	<= r_block13;
+//			r_block14	<= r_block14;
+//			r_block15	<= r_block15;
+//		end
 	end
-	
-	// o_block
+
+	// serialize block
 	always @(posedge i_clk, negedge i_rstn) begin
 		if(!i_rstn)
-			o_block <= 512'd0;
+			o_stream <= 511'd0;
 		else if(r_fsm==DONE)
-			o_block = {
-				r_block[15], r_block[14], r_block[13], r_block[12],
-				r_block[11], r_block[10], r_block[9],  r_block[8],
-				r_block[7],  r_block[6],  r_block[5],  r_block[4],
-				r_block[3],  r_block[2],  r_block[1],  r_block[0]
-			};
+			o_stream <={r_block0,  r_block1,  r_block2,  r_block3,
+						r_block4,  r_block5,  r_block6,  r_block7,
+						r_block8,  r_block9,  r_block10, r_block11,
+						r_block12, r_block13, r_block14, r_block15};
 	end
+
+//	// r_
+//	always @(posedge i_clk, negedge i_rstn) begin
+//		if (!i_rstn)
+//		
+//		else if ()
+//		
+//		else
+//		
+//	end
 
 endmodule 
