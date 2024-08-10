@@ -17,17 +17,16 @@ module cc_block (
 	parameter CONSTANT2 = 32'h79622d32;
 	parameter CONSTANT3 = 32'h6b206574;
 	// state
-	parameter IDLE	= 3'd0;
-	parameter RDY	= 3'd1;
-	parameter RND	= 3'd2;
-	parameter ADD	= 3'd3;
-	parameter DONE	= 3'd4;
+	parameter IDLE	= 3'b000;
+	parameter RDY	= 3'b001;
+	parameter RND	= 3'b010;
+	parameter ADD	= 3'b110;
+	parameter DONE	= 3'b100;
 
 	// ***** local register definition *****
 	reg [2:0] r_fsm;
 	reg [4:0] r_cnt_rnd;
 	reg [3:0] r_cnt_calc;
-	reg		[31:0]	r_state0, r_state1, r_state2, r_state3, r_state4, r_state5, r_state6, r_state7, r_state8, r_state9, r_state10, r_state11, r_state12, r_state13, r_state14, r_state15;
 	reg		[31:0]	r_block0, r_block1, r_block2, r_block3, r_block4, r_block5, r_block6, r_block7, r_block8, r_block9, r_block10, r_block11, r_block12, r_block13, r_block14, r_block15;
 
 	// ***** local wire definition *****
@@ -89,64 +88,6 @@ module cc_block (
 			r_cnt_calc <= r_cnt_calc;
 	end
 
-	// save init state (key, nonce, count)
-	always @(posedge i_clk, negedge i_rstn) begin
-		if (!i_rstn) begin
-			r_state0	<= 32'd0;
-			r_state1	<= 32'd0;
-			r_state2	<= 32'd0;
-			r_state3	<= 32'd0;
-			r_state4	<= 32'd0;
-			r_state5	<= 32'd0;
-			r_state6	<= 32'd0;
-			r_state7	<= 32'd0;
-			r_state8	<= 32'd0;
-			r_state9	<= 32'd0;
-			r_state10	<= 32'd0;
-			r_state11	<= 32'd0;
-			r_state12	<= 32'd0;
-			r_state13	<= 32'd0;
-			r_state14	<= 32'd0;
-			r_state15	<= 32'd0;
-		end
-		else if (r_fsm == RDY) begin
-			r_state0	<= CONSTANT0;
-			r_state1	<= CONSTANT1;
-			r_state2	<= CONSTANT2;
-			r_state3	<= CONSTANT3;
-			r_state4	<= w_block4;
-			r_state5	<= w_block5;
-			r_state6	<= w_block6;
-			r_state7	<= w_block7;
-			r_state8	<= w_block8;
-			r_state9	<= w_block9;
-			r_state10	<= w_block10;
-			r_state11	<= w_block11;
-			r_state12	<= 
-			r_state13	<= w_block13;
-			r_state14	<= w_block14;
-			r_state15	<= w_block15;
-		end
-//		else begin
-//			r_state0	<= r_state0;
-//			r_state1	<= r_state1;
-//			r_state2	<= r_state2;
-//			r_state3	<= r_state3;
-//			r_state4	<= r_state4;
-//			r_state5	<= r_state5;
-//			r_state6	<= r_state6;
-//			r_state7	<= r_state7;
-//			r_state8	<= r_state8;
-//			r_state9	<= r_state9;
-//			r_state10	<= r_state10;
-//			r_state11	<= r_state11;
-//			r_state12	<= r_state12;
-//			r_state13	<= r_state13;
-//			r_state14	<= r_state14;
-//			r_state15	<= r_state15;
-//		end
-	end
-
 	// calc quarter round & block += state
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn) begin
@@ -186,7 +127,7 @@ module cc_block (
 			r_block15	<= w_block15;
 		end
 		else if(r_fsm==RND) begin
-			if (r_cnt_rnd % 2==0)  // odd round
+			if (r_cnt_rnd[0]==0)  // odd round
 				case (r_cnt_calc)
 					4'd0: begin  // a+=b
 						r_block0	<= r_block0 + r_block4;
@@ -374,22 +315,22 @@ module cc_block (
 				endcase
 		end
 		else if(r_fsm==ADD) begin
-			r_block0	<= r_block0  + r_state0;
-			r_block1	<= r_block1  + r_state1;
-			r_block2	<= r_block2  + r_state2;
-			r_block3	<= r_block3  + r_state3;
-			r_block4	<= r_block4  + r_state4;
-			r_block5	<= r_block5  + r_state5;
-			r_block6	<= r_block6  + r_state6;
-			r_block7	<= r_block7  + r_state7;
-			r_block8	<= r_block8  + r_state8;
-			r_block9	<= r_block9  + r_state9;
-			r_block10	<= r_block10 + r_state10;
-			r_block11	<= r_block11 + r_state11;
-			r_block12	<= r_block12 + r_state12;
-			r_block13	<= r_block13 + r_state13;
-			r_block14	<= r_block14 + r_state14;
-			r_block15	<= r_block15 + r_state15;
+			r_block0	<= r_block0  + CONSTANT0;
+			r_block1	<= r_block1  + CONSTANT1;
+			r_block2	<= r_block2  + CONSTANT2;
+			r_block3	<= r_block3  + CONSTANT3;
+			r_block4	<= r_block4  + w_block4;
+			r_block5	<= r_block5  + w_block5;
+			r_block6	<= r_block6  + w_block6;
+			r_block7	<= r_block7  + w_block7;
+			r_block8	<= r_block8  + w_block8;
+			r_block9	<= r_block9  + w_block9;
+			r_block10	<= r_block10 + w_block10;
+			r_block11	<= r_block11 + w_block11;
+			r_block12	<= r_block12 + i_cnt;
+			r_block13	<= r_block13 + w_block13;
+			r_block14	<= r_block14 + w_block14;
+			r_block15	<= r_block15 + w_block15;
 		end
 //		else begin
 //			r_block0	<= r_block0;
@@ -421,15 +362,5 @@ module cc_block (
 						r_block8,  r_block9,  r_block10, r_block11,
 						r_block12, r_block13, r_block14, r_block15};
 	end
-
-//	// r_
-//	always @(posedge i_clk, negedge i_rstn) begin
-//		if (!i_rstn)
-//		
-//		else if ()
-//		
-//		else
-//		
-//	end
 
 endmodule 
