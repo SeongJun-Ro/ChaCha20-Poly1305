@@ -1,13 +1,13 @@
 module cc_block (
-	input				i_clk, i_rstn,
-	input				i_start,
+	input					i_clk, i_rstn,
+	input					i_start,
 	
-	input		[255:0]	i_key,
-	input		[95:0]	i_non,
-	input		[31:0]	i_cnt,
+	input			[255:0]	i_key,
+	input			[95:0]	i_non,
+	input			[31:0]	i_cnt,
 	
-	output	reg	[511:0]	o_stream,
-	output	wire		o_done
+	output	wire	[511:0]	o_stream,
+	output	wire			o_done
 );
 
 	// ***** local parameter definition *****
@@ -17,21 +17,22 @@ module cc_block (
 	parameter CONSTANT2 = 32'h79622d32;
 	parameter CONSTANT3 = 32'h6b206574;
 	// state
-	parameter IDLE	= 3'b000;
-	parameter RDY	= 3'b001;
-	parameter RND	= 3'b010;
-	parameter ADD	= 3'b110;
-	parameter DONE	= 3'b100;
+	parameter IDLE	= 2'b00;
+	parameter RND	= 2'b01;
+	parameter ADD	= 2'b11;
+	parameter DONE	= 2'b10;
 
 	// ***** local register definition *****
-	reg [2:0] r_fsm;
-	reg [4:0] r_cnt_rnd;
-	reg [3:0] r_cnt_calc;
+	reg		[1:0]	r_fsm;
+	reg		[4:0]	r_cnt_rnd;
+	reg		[3:0]	r_cnt_calc;
 	reg		[31:0]	r_block0, r_block1, r_block2, r_block3, r_block4, r_block5, r_block6, r_block7, r_block8, r_block9, r_block10, r_block11, r_block12, r_block13, r_block14, r_block15;
 
 	// ***** local wire definition *****
 	wire	[31:0]	w_block4, w_block5, w_block6, w_block7, w_block8, w_block9, w_block10, w_block11, w_block13, w_block14, w_block15;
+	wire			w_rnd_done;
 
+	// mapping input data & block
 	assign	w_block4	= i_key[31:0];
 	assign	w_block5	= i_key[63:32];
 	assign	w_block6	= i_key[95:64];
@@ -43,21 +44,30 @@ module cc_block (
 	assign	w_block13	= i_non[31:0];
 	assign	w_block14	= i_non[63:32];
 	assign	w_block15	= i_non[95:64];
+	
+	// Quarter Round done signal
+	assign	w_rnd_done	= (r_cnt_rnd == 5'd19 && r_cnt_calc == 4'd11);
 
-	assign o_done = (r_fsm == DONE);
+	// serialize block
+	assign	o_stream = {r_block15, r_block14, r_block13, r_block12,
+						r_block11, r_block10, r_block9,  r_block8,
+						r_block7,  r_block6,  r_block5,  r_block4,
+						r_block3,  r_block2,  r_block1,  r_block0};
+	// cc_block module done
+	assign	o_done = (r_fsm == DONE);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 	// Explanation of always statement
 
+	// fsm
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn)
 			r_fsm <= IDLE;
 		else
 			case(r_fsm)
-				IDLE	: r_fsm <= (i_start) ? RDY : IDLE;
-				RDY		: r_fsm <= RND;
-				RND		: r_fsm <= (r_cnt_rnd == 5'd19 && r_cnt_calc == 4'd11) ? ADD : RND;
+				IDLE	: r_fsm <= (i_start) ? RND : IDLE;
+				RND		: r_fsm <= (w_rnd_done) ? ADD : RND;
 				ADD		: r_fsm <= DONE;
 				DONE	: r_fsm <= IDLE;
 				default : r_fsm	<= IDLE;
@@ -80,12 +90,10 @@ module cc_block (
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn)
 			r_cnt_calc <= 4'd0;
-		else if (r_fsm == IDLE)
-			r_cnt_calc <= 4'd0;
 		else if (r_fsm == RND)
 			r_cnt_calc <= (r_cnt_calc == 4'd11) ? 4'd0 : r_cnt_calc + 1'b1;
 		else
-			r_cnt_calc <= r_cnt_calc;
+			r_cnt_calc <= 4'd0;
 	end
 
 	// calc quarter round & block += state
@@ -108,7 +116,7 @@ module cc_block (
 			r_block14	<= 32'd0;
 			r_block15	<= 32'd0;
 		end
-		else if (r_fsm == RDY) begin
+		else if (i_start) begin
 			r_block0	<= CONSTANT0;
 			r_block1	<= CONSTANT1;
 			r_block2	<= CONSTANT2;
@@ -351,16 +359,5 @@ module cc_block (
 //			r_block15	<= r_block15;
 //		end
 	end
-
-	// serialize block
-	always @(posedge i_clk, negedge i_rstn) begin
-		if(!i_rstn)
-			o_stream <= 511'd0;
-		else if(r_fsm==DONE)
-			o_stream <={r_block0,  r_block1,  r_block2,  r_block3,
-						r_block4,  r_block5,  r_block6,  r_block7,
-						r_block8,  r_block9,  r_block10, r_block11,
-						r_block12, r_block13, r_block14, r_block15};
-	end
-
+	
 endmodule 
