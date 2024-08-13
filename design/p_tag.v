@@ -12,16 +12,17 @@ module p_tag (
 );
 
 	// ***** local parameter definition *****
-	parameter IDLE	= 4'd0;
-	parameter KEYS	= 4'd1;
-	parameter MSG	= 4'h2;
-	parameter ADD1	= 4'd3;
-	parameter MUL	= 4'd4;
-	parameter MOD1	= 4'd5;
-	parameter WAIT	= 4'd6;
-	parameter MOD2	= 4'd7;
-	parameter ADD2	= 4'd8;
-	parameter DONE	= 4'd9;
+	parameter IDLE	= 4'h0;
+	parameter KEYR	= 4'h1;
+	parameter KEYS	= 4'h2;
+	parameter MSG	= 4'h3;
+	parameter ADD1	= 4'h4;
+	parameter MUL	= 4'h5;
+	parameter MOD1	= 4'h6;
+	parameter WAIT	= 4'h7;
+	parameter MOD2	= 4'h8;
+	parameter ADD2	= 4'h9;
+	parameter DONE	= 4'ha;
 
 	parameter CLAMP 	= 128'h0ffffffc_0ffffffc_0ffffffc_0fffffff;
 	parameter CONCAT	= 134'h00_00000000_00000000_00000000_00000001;
@@ -66,7 +67,8 @@ module p_tag (
 			r_fsm	<= IDLE;
 		else
 			case (r_fsm)
-				IDLE	: r_fsm <=	(i_start)		? KEYS	: IDLE;
+				IDLE	: r_fsm <=	(i_start)		? KEYR	: IDLE;
+				KEYR	: r_fsm <=	(i_en_msg)		? KEYS	: KEYR;
 				KEYS	: r_fsm <=	(i_en_msg)		? MSG	: KEYS;
 				MSG		: r_fsm <=	(i_en_msg)		? ADD1	: MSG;
 				ADD1	: r_fsm <=	(r_cnt=='d5)	? MUL	: ADD1;
@@ -95,7 +97,7 @@ module p_tag (
 		if (!i_rstn)
 			r_key_r	<= 128'd0;
 		else
-			r_key_r	<= (i_start) ? CLAMP & i_msg : r_key_r;
+			r_key_r	<= ((r_fsm==KEYR) && i_en_msg) ? CLAMP & i_msg : r_key_r;
 	end
 
 	always @(posedge i_clk, negedge i_rstn) begin
