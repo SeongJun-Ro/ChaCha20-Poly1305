@@ -55,24 +55,31 @@ module tb_p_tag;
 	// Specify the user define stimulus
 	initial begin
 		i_en_msg = 1'b0;
-		i_msg = 128'ha806d542_fe52447f_336d5557_78bed685;		// key r
+		i_msg = 128'd0;
 		i_len_msg = 32'd34;
 
 		@(posedge o_rqst_msg)
+	    #(`T_CLK *1.2)
+			i_en_msg = 1'b1;
+			i_msg = 128'ha806d542_fe52447f_336d5557_78bed685;	// key r
+	    #(`T_CLK *1)
+			i_en_msg = 1'b0;
+
+		wait(o_rqst_msg)
 	    #(`T_CLK *1.2)
 			i_en_msg = 1'b1;
 			i_msg = 128'h1bf54941_aff6bf4a_fdb20dfb_8a800301;	// key s
 	    #(`T_CLK *1)
 			i_en_msg = 1'b0;
 
-		@(posedge o_rqst_msg)
+		wait(o_rqst_msg)
 	    #(`T_CLK *1.2)
 			i_en_msg = 1'b1;
 			i_msg = 128'h6f462063_69687061_72676f74_70797243;	// msg
 	    #(`T_CLK *1)
 			i_en_msg = 1'b0;
 
-		@(posedge o_rqst_msg)
+		wait(o_rqst_msg)
 	    #(`T_CLK *3.2)
 	    	i_en_msg	= 1'b1;
 			i_msg	= 128'h6f724720_68637261_65736552_206d7572;
@@ -97,7 +104,7 @@ module tb_p_tag;
 	    #(`T_CLK *1)
 		i_start	= 1'b0;
 
-		#(`T_CLK *100)
+		#(`T_CLK *120)
 
 		#(`T_CLK *10) $finish;
 	end
