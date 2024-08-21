@@ -1,9 +1,10 @@
-module addr_ctrl (
+module fifo_addr_ctrl (
 	input			i_clk, i_rstn,
 	input			i_w_en, i_r_en,
 	input	[511:0]	i_data,
 	
-	output	[127:0]	o_data
+	output	[127:0]	o_data,
+	output	reg		o_sig
 );
 	
 	// ***** local parameter definition *****
@@ -73,6 +74,14 @@ module addr_ctrl (
 			r_addr_r	<=	3'd0;
 		else
 			r_addr_r	<=	(i_r_en) ? r_addr_r + 1'b1 : r_addr_r;
+	end
+
+
+	always @(posedge i_clk, negedge i_rstn) begin
+		if(!i_rstn)
+			o_sig	<=	1'd0;
+		else
+			o_sig	<=	i_r_en;
 	end
 
 endmodule
