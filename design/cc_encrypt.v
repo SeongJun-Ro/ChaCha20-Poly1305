@@ -2,14 +2,14 @@ module cc_encrypt (
 	input					i_clk, i_rstn,
 	input					i_start,
 	
-	input					i_sig_pt,
+	input					i_en_pt,
 	input		[255:0]		i_key,
 	input		[95:0]		i_non,
 	input		[511:0]		i_pt,
 	input		[31:0]		i_len_pt,
 
 	output	reg	[511:0]		o_ct,
-	output	reg				o_read_pt,
+	output	reg				o_rqst_pt,
 	output	wire			o_done
 );
 
@@ -41,7 +41,7 @@ module cc_encrypt (
 	wire	[511:0]	w_mask;
 	
 	assign	w_blk_state	= r_len_pt!=32'd0;
-	assign	w_blk_start	= (i_start) || ((r_fsm == CRYPT) && i_sig_pt);
+	assign	w_blk_start	= (i_start) || ((r_fsm == CRYPT) && i_en_pt);
 	assign	w_mask		= (r_len_pt<32'd64) ? (MASK >> {32'd64-r_len_pt, 3'd0}) : MASK;
 	
 	assign	o_done		= (r_fsm == DONE);
@@ -95,8 +95,8 @@ module cc_encrypt (
 
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn)
-			r_cnt	<= 32'd1;
-		else if (o_read_pt)
+			r_cnt	<= 32'd0;
+		else if (o_rqst_pt)
 			r_cnt	<= r_cnt + 1'b1;
 //		else
 //			r_cnt	<= r_cnt;
@@ -105,7 +105,7 @@ module cc_encrypt (
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn)
 			r_pt	<= 512'd0;
-		else if (i_start || i_sig_pt)
+		else if (i_start || i_en_pt)
 			r_pt	<= i_pt;
 //		else
 //			r_pt	<= r_pt;
@@ -113,11 +113,13 @@ module cc_encrypt (
 
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn)
-			r_len_pt	<= 32'd0;
+			r_len_pt	<=	32'd0;
 		else if (i_start)
-			r_len_pt	<= i_len_pt;
+			r_len_pt	<=	i_len_pt;
 		else if (w_blk_done)
-			r_len_pt	<= (r_len_pt<32'd64) ? 32'd0 : r_len_pt - 32'd64;
+			r_len_pt	<=	(!r_cnt==32'd0) ? 
+							(r_len_pt<32'd64) ? 32'd0 : r_len_pt - 32'd64
+							: r_len_pt;
 //		else
 //			r_len_pt	<= r_len_pt;
 	end
@@ -125,19 +127,21 @@ module cc_encrypt (
 	// read o_ct and input pt
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn)
-			o_read_pt	<= 1'd0;
+			o_rqst_pt	<= 1'd0;
 		else if (w_blk_done && w_blk_state)
-			o_read_pt	<= (r_len_pt<32'd64) ? 1'b0 : 1'b1;
+			o_rqst_pt	<= (r_len_pt<32'd64) ? 1'b0 : 1'b1;
 		else
-			o_read_pt	<= 1'd0;
+			o_rqst_pt	<= 1'd0;
 	end
 	
 	// encrypt plain text
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn)
-			o_ct	<= 512'd0;
+			o_ct	<=	512'd0;
 		else
-			o_ct	<= (w_blk_done) ? w_mask & (w_stream ^ r_pt) : o_ct;
+			o_ct	<=	(w_blk_done) ? 
+						(r_cnt==32'd0) ? w_stream : w_mask & (w_stream ^ r_pt) 
+						: o_ct;
 	end
 
 endmodule 
