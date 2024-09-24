@@ -1,8 +1,10 @@
 module p_tag (
 	input					i_clk, i_rstn,
 	input					i_start,
-	
+
 	input					i_en_msg,
+	input		[127:0]		i_key_r,
+	input		[127:0]		i_key_s,
 	input		[127:0]		i_msg,
 	input		[31:0]		i_len_msg,
 
@@ -11,53 +13,52 @@ module p_tag (
 	output	wire			o_done
 );
 
-	// ***** local parameter definition *****
-	parameter IDLE	= 4'h0;
-	parameter KEYR	= 4'h1;
-	parameter KEYS	= 4'h2;
-	parameter MSG	= 4'h3;
-	parameter ADD1	= 4'h4;
-	parameter MUL	= 4'h5;
-	parameter MOD1	= 4'h6;
-	parameter WAIT	= 4'h7;
-	parameter MOD2	= 4'h8;
-	parameter ADD2	= 4'h9;
-	parameter DONE	= 4'ha;
-
+	// fsm parameter
+	parameter IDLE	= 3'd0;
+	parameter ADD1	= 3'd1;
+	parameter MUL	= 3'd2;
+	parameter MOD1	= 3'd3;
+	parameter WAIT	= 3'd4;
+	parameter MOD2	= 3'd5;
+	parameter ADD2	= 3'd6;
+	parameter DONE	= 3'd7;
+	// clamp for i_key_r
 	parameter CLAMP 	= 128'h0ffffffc_0ffffffc_0ffffffc_0fffffff;
+	// concate 0x01 | i_msg
 	parameter CONCAT	= 134'h00_00000000_00000000_00000000_00000001;
 
-	// ***** local register definition *****
-	reg		[3:0]	r_fsm;
+	reg		[2:0]	r_fsm;
 	reg		[31:0]	r_cnt;
-	reg		[127:0]	r_key_r, r_key_s;
 	reg		[127:0]	r_msg;
 	reg		[31:0]	r_len_msg;
-
-	reg		[63:0]	r_acml0, r_acml1, r_acml2, r_acml3, r_acml4, r_acml5, r_acml6;
-	reg		[63:0]	r_acml7;
+	reg		[63:0]	r_acml0, r_acml1, r_acml2, r_acml3, r_acml4, r_acml5, r_acml6, r_acml7;
 	reg		[31:0]	r_a0, r_a1, r_a2, r_a3, r_a4;
 
-	// ***** local wire definition *****
+	wire	[127:0]	w_key_r;
 	wire	[31:0]	w_key_r0, w_key_r1, w_key_r2, w_key_r3;
 	wire	[31:0]	w_key_s0, w_key_s1, w_key_s2, w_key_s3;
 	wire	[135:0]	w_msg_exp; 
 	wire			w_msg_state;
 	wire			w_msg_start;
 
-
-	assign	w_key_r0	= r_key_r[31:0];
-	assign	w_key_r1	= r_key_r[63:32];
-	assign	w_key_r2	= r_key_r[95:64];
-	assign	w_key_r3	= r_key_r[127:96];
-	assign	w_key_s0	= r_key_s[31:0];
-	assign	w_key_s1	= r_key_s[63:32];
-	assign	w_key_s2	= r_key_s[95:64];
-	assign	w_key_s3	= r_key_s[127:96];
+	// clap i_key_r
+	assign	w_key_r		= i_key_r & CLAMP;
+	// split the key into 32bit
+	assign	w_key_r0	= w_key_r[31:0];
+	assign	w_key_r1	= w_key_r[63:32];
+	assign	w_key_r2	= w_key_r[95:64];
+	assign	w_key_r3	= w_key_r[127:96];
+	assign	w_key_s0	= i_key_s[31:0];
+	assign	w_key_s1	= i_key_s[63:32];
+	assign	w_key_s2	= i_key_s[95:64];
+	assign	w_key_s3	= i_key_s[127:96];
+	// 
 	assign	w_msg_exp	= (r_len_msg<32'd16) ? (1'b1 << {r_len_msg,3'd0}) + r_msg : {8'h01,r_msg};
+	// 
 	assign	w_msg_state	= r_len_msg!=32'd0;
+	// 
 	assign	w_msg_start	= ((r_fsm == WAIT) && (i_en_msg));
-	
+	// 
 	assign	o_done		= (r_fsm == DONE);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -67,10 +68,7 @@ module p_tag (
 			r_fsm	<= IDLE;
 		else
 			case (r_fsm)
-				IDLE	: r_fsm <=	(i_start)		? KEYR	: IDLE;
-				KEYR	: r_fsm <=	(i_en_msg)		? KEYS	: KEYR;
-				KEYS	: r_fsm <=	(i_en_msg)		? MSG	: KEYS;
-				MSG		: r_fsm <=	(i_en_msg)		? ADD1	: MSG;
+				IDLE	: r_fsm <=	(i_start)		? ADD1	: IDLE;
 				ADD1	: r_fsm <=	(r_cnt=='d5)	? MUL	: ADD1;
 				MUL		: r_fsm <=	(r_cnt=='d8)	? MOD1	: MUL;
 				MOD1	: r_fsm <=	(r_cnt=='d13)	? WAIT	: MOD1;
@@ -78,33 +76,26 @@ module p_tag (
 									(w_msg_start)	? ADD1	: WAIT;
 				MOD2	: r_fsm <=	(r_cnt=='d5)	? ADD2	: MOD2;
 				ADD2	: r_fsm <=	(r_cnt=='d4)	? DONE	: ADD2;
-				DONE	: r_fsm <=	IDLE;
+				DONE	: r_fsm <= IDLE;
 			endcase
 	end
 
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn)
-			r_cnt <= 3'd0;
+			r_cnt <= 'd0;
 		else
-			r_cnt	<=	(r_fsm==ADD1) ? (r_cnt=='d5)  ? 'd0 : r_cnt+1'b1 :
-						(r_fsm==MUL)  ? (r_cnt=='d8)  ? 'd0 : r_cnt+1'b1 :
-						(r_fsm==MOD1) ? (r_cnt=='d13) ? 'd0 : r_cnt+1'b1 :
-						(r_fsm==MOD2) ? (r_cnt=='d5)  ? 'd0 : r_cnt+1'b1 :
-						(r_fsm==ADD2) ? (r_cnt=='d4)  ? 'd0 : r_cnt+1'b1 : 'd0;
-	end
-
-	always @(posedge i_clk, negedge i_rstn) begin
-		if (!i_rstn)
-			r_key_r	<= 128'd0;
-		else
-			r_key_r	<= ((r_fsm==KEYR) && i_en_msg) ? CLAMP & i_msg : r_key_r;
-	end
-
-	always @(posedge i_clk, negedge i_rstn) begin
-		if (!i_rstn)
-			r_key_s	<= 128'd0;
-		else
-			r_key_s	<= ((r_fsm==KEYS) && i_en_msg) ? i_msg : r_key_s;
+			if (r_fsm==ADD1)
+				r_cnt <= (r_cnt=='d5)  ? 'd0 : r_cnt+1'b1;
+			else if (r_fsm==MUL)
+				r_cnt <= (r_cnt=='d8)  ? 'd0 : r_cnt+1'b1;
+			else if (r_fsm==MOD1)
+				r_cnt <= (r_cnt=='d13) ? 'd0 : r_cnt+1'b1;
+			else if (r_fsm==MOD2)
+				r_cnt <= (r_cnt=='d5)  ? 'd0 : r_cnt+1'b1;
+			else if (r_fsm==ADD2)
+				r_cnt <= (r_cnt=='d4)  ? 'd0 : r_cnt+1'b1;
+			else
+				r_cnt <= 'd0;
 	end
 
 	always @(posedge i_clk, negedge i_rstn) begin
@@ -267,8 +258,8 @@ module p_tag (
 				r_acml2	<= r_acml2 + r_acml1[63:32];
 			else if(r_cnt=='d3)
 				r_acml3	<= r_acml3 + r_acml2[63:32];
-			else if(r_cnt=='d4)
-				r_acml4	<= r_acml4 + r_acml3[63:32];
+//			else if(r_cnt=='d4)
+//				r_acml4	<= r_acml4 + r_acml3[63:32];
 		end
 //		else begin
 //			r_acml0	<= r_acml0;
@@ -312,15 +303,33 @@ module p_tag (
 			r_a3	<=	r_acml3[31:0];
 			r_a4	<=	{30'd0, r_acml4[1:0]};
 		end
-		else begin
-			r_a0 <= r_a0;
-			r_a1 <= r_a1;
-			r_a2 <= r_a2;
-			r_a3 <= r_a3;
-			r_a4 <= r_a4;
-		end
+//		else begin
+//			r_a0 <= r_a0;
+//			r_a1 <= r_a1;
+//			r_a2 <= r_a2;
+//			r_a3 <= r_a3;
+//			r_a4 <= r_a4;
+//		end
 	end
-	
+
+	// input msg
+	always @(posedge i_clk, negedge i_rstn) begin
+		if (!i_rstn)
+			o_rqst_msg	<= 1'd0;
+		else if ((w_msg_state) && (r_cnt=='d13))
+			o_rqst_msg	<= (r_len_msg<32'd16) ? 1'b0 : 1'b1;
+		else
+			o_rqst_msg	<= 1'd0;
+	end
+
+	// encrypt plain text
+	always @(posedge i_clk, negedge i_rstn) begin
+		if (!i_rstn)
+			o_tag	<= 128'd0;
+		else
+			o_tag	<= ((r_fsm==ADD2) && (r_cnt=='d4)) ? {r_acml3[31:0],r_acml2[31:0],r_acml1[31:0],r_acml0[31:0]} : o_tag;
+	end
+
 //	wire	[135:0]	w_p;
 //	assign	w_p	= ((135'd1<<130)-5);
 //	reg		[255:0]	r_mod;
@@ -334,24 +343,4 @@ module p_tag (
 ////		else
 //	end
 
-	// input msg
-	always @(posedge i_clk, negedge i_rstn) begin
-		if (!i_rstn)
-			o_rqst_msg	<= 1'd0;
-		else if ((i_start) || ((r_fsm==KEYR || r_fsm==KEYS) && i_en_msg))
-			o_rqst_msg	<= 1'b1;
-		else if ((w_msg_state) && (r_cnt=='d13))
-			o_rqst_msg	<= (r_len_msg<32'd16) ? 1'b0 : 1'b1;
-		else
-			o_rqst_msg	<= 1'd0;
-	end
-	
-	// encrypt plain text
-	always @(posedge i_clk, negedge i_rstn) begin
-		if (!i_rstn)
-			o_tag	<=	128'd0;
-		else
-			o_tag	<=	((r_fsm==ADD2)&&(r_cnt==4)) ? {r_acml3[31:0],r_acml2[31:0],r_acml1[31:0],r_acml0[31:0]} : o_tag;
-	end
-
-endmodule 
+endmodule
