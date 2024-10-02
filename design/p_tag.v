@@ -6,7 +6,7 @@ module p_tag (
 	input		[127:0]		i_key_r,
 	input		[127:0]		i_key_s,
 	input		[127:0]		i_msg,
-	input		[31:0]		i_len_msg,
+	input		[64:0]		i_len_msg,
 
 	output	reg				o_rqst_msg,
 	output	reg	[127:0]		o_tag,
@@ -30,7 +30,7 @@ module p_tag (
 	reg		[2:0]	r_fsm;
 	reg		[31:0]	r_cnt;
 	reg		[127:0]	r_msg;
-	reg		[31:0]	r_len_msg;
+	reg		[64:0]	r_len_msg;
 	reg		[63:0]	r_acml0, r_acml1, r_acml2, r_acml3, r_acml4, r_acml5, r_acml6, r_acml7;
 	reg		[31:0]	r_a0, r_a1, r_a2, r_a3, r_a4;
 
@@ -53,9 +53,9 @@ module p_tag (
 	assign	w_key_s2	= i_key_s[95:64];
 	assign	w_key_s3	= i_key_s[127:96];
 	// 
-	assign	w_msg_exp	= (r_len_msg<32'd16) ? (1'b1 << {r_len_msg,3'd0}) + r_msg : {8'h01,r_msg};
+	assign	w_msg_exp	= (r_len_msg<65'd16) ? (1'b1 << {r_len_msg,3'd0}) + r_msg : {8'h01,r_msg};
 	// 
-	assign	w_msg_state	= r_len_msg!=32'd0;
+	assign	w_msg_state	= r_len_msg!=65'd0;
 	// 
 	assign	w_msg_start	= ((r_fsm == WAIT) && (i_en_msg));
 	// 
@@ -109,11 +109,11 @@ module p_tag (
 
 	always @(posedge i_clk, negedge i_rstn) begin
 		if (!i_rstn)
-			r_len_msg	<= 32'd0;
+			r_len_msg	<= 65'd0;
 		else if (i_start)
 			r_len_msg	<= i_len_msg;
 		else if (r_fsm==MOD1 && r_cnt=='d13)
-			r_len_msg	<= (r_len_msg<32'd16) ? 32'd0 : r_len_msg - 32'd16;
+			r_len_msg	<= (r_len_msg<65'd16) ? 33'd0 : r_len_msg - 65'd16;
 //		else
 //			r_len_msg	<= r_len_msg;
 	end
@@ -317,7 +317,7 @@ module p_tag (
 		if (!i_rstn)
 			o_rqst_msg	<= 1'd0;
 		else if ((w_msg_state) && (r_cnt=='d13))
-			o_rqst_msg	<= (r_len_msg<32'd16) ? 1'b0 : 1'b1;
+			o_rqst_msg	<= (r_len_msg<65'd16) ? 1'b0 : 1'b1;
 		else
 			o_rqst_msg	<= 1'd0;
 	end
