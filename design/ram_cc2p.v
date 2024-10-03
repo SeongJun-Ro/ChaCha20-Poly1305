@@ -1,4 +1,4 @@
-// `define TEST
+`define TEST
 
 module ram_cc2p (
 	input					i_clk, i_rstn,
@@ -7,8 +7,6 @@ module ram_cc2p (
 
 	output			[127:0]	o_data,
 	output	reg				o_sig,
-//	output	reg				o_full,
-//	output	reg				o_empty
 	output					o_full,
 	output	reg				o_empty
 );
@@ -18,10 +16,10 @@ module ram_cc2p (
 	parameter	A_WIDTH = 3;
 
 	// ***** local register definition *****
-	reg		[A_WIDTH:0]		r_addr_w, r_addr_r;
 	reg		[511:0]			r_stream;
+	reg		[A_WIDTH:0]		r_addr_w;
 	reg		[2:0]			r_cnt_w;
-	reg						r_empty_d1;
+	reg		[A_WIDTH:0]		r_addr_r;
 	reg						r_en_r;
 
 	// ***** local wire definition *****
@@ -110,18 +108,9 @@ module ram_cc2p (
 
 	always @(posedge i_clk, negedge i_rstn) begin
 		if(!i_rstn)
-			r_empty_d1	<=	1'd0;
-		else
-			r_empty_d1	<=	o_empty;
-	end
-
-	always @(posedge i_clk, negedge i_rstn) begin
-		if(!i_rstn)
 			r_en_r	<=	1'd0;
 		else if(i_en_r)
 			r_en_r	<=	1'd1;
-		else if(!o_empty && r_empty_d1)
-			r_en_r	<=	1'd0;
 		else if(!o_empty && r_en_r)
 			r_en_r	<=	1'd0;
 		else
@@ -131,12 +120,8 @@ module ram_cc2p (
 	always @(posedge i_clk, negedge i_rstn) begin
 		if(!i_rstn)
 			o_sig	<=	1'd0;
-		else if(r_en_r && !o_empty && r_empty_d1)
-			o_sig	<=	1'd1;
-		else if(!o_empty && r_en_r)
-			o_sig	<=	1'd1;
 		else
-			o_sig	<=	1'd0;
+			o_sig	<=	(!o_empty && r_en_r) ? 1'd1 : 1'd0;
 	end
 
 	always @(posedge i_clk, negedge i_rstn) begin
