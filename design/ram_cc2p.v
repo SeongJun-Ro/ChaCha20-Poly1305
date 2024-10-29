@@ -6,9 +6,10 @@ module ram_cc2p (
 	input			[511:0]	i_data,
 
 	output			[127:0]	o_data,
-	output	reg				o_sig,
-	output					o_full,
-	output	reg				o_empty
+	output					o_sig_r,
+	output	reg				o_full,
+	output	reg				o_empty,
+	output					o_w_ing
 );
 
 	// ***** local parameter definition *****
@@ -21,6 +22,7 @@ module ram_cc2p (
 	reg		[2:0]			r_cnt_w;
 	reg		[A_WIDTH:0]		r_addr_r;
 	reg						r_en_r;
+	reg						r_sig_r, r_sig_r_d1;
 
 	// ***** local wire definition *****
 	wire					w_en_w;
@@ -33,8 +35,9 @@ module ram_cc2p (
 	assign	w_addr_r	=	r_addr_r[A_WIDTH-1:0];
 	assign	w_stream	=	r_stream[127:0];
 	assign	w_chk_full	=	r_addr_w + 3'd4;
-	
-	assign o_full		=	((w_chk_full[A_WIDTH]!=r_addr_r[A_WIDTH]) && (w_chk_full[A_WIDTH-1:0]>=r_addr_r[A_WIDTH-1:0])) ? 1'd1 : 1'd0;
+
+	assign	o_sig_r		=	r_sig_r_d1;
+	assign	o_w_ing		=	w_en_w;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -113,15 +116,19 @@ module ram_cc2p (
 			r_en_r	<=	1'd1;
 		else if(!o_empty && r_en_r)
 			r_en_r	<=	1'd0;
-		else
-			r_en_r	<=	r_en_r;
+//		else
+//			r_en_r	<=	r_en_r;
 	end
 
 	always @(posedge i_clk, negedge i_rstn) begin
-		if(!i_rstn)
-			o_sig	<=	1'd0;
-		else
-			o_sig	<=	(!o_empty && r_en_r) ? 1'd1 : 1'd0;
+		if(!i_rstn) begin
+			r_sig_r		<= 1'd0;
+			r_sig_r_d1	<= 1'd0;
+		end
+		else begin
+			r_sig_r		<= (!o_empty && r_en_r) ? 1'd1 : 1'd0;
+			r_sig_r_d1	<= r_sig_r;
+		end
 	end
 
 	always @(posedge i_clk, negedge i_rstn) begin
@@ -129,6 +136,14 @@ module ram_cc2p (
 			o_empty	<=	1'd0;
 		else
 			o_empty	<=	(w_addr_w==w_addr_r+1'b1) ? 1'd1 : 1'd0;
+	end
+
+	always @(posedge i_clk, negedge i_rstn) begin
+		if(!i_rstn)
+			o_full	<=	1'd0;
+		else
+			o_full	<=	((w_chk_full[A_WIDTH]!=r_addr_r[A_WIDTH]) &&
+						(w_chk_full[A_WIDTH-1:0]>=r_addr_r[A_WIDTH-1:0])) ? 1'd1 : 1'd0;
 	end
 
 endmodule
