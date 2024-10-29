@@ -20,7 +20,7 @@ module tb_ram_cc2p;
 	reg		[511:0]		i_data;
 
 	wire	[127:0]		o_data;
-	wire				o_sig;
+	wire				o_sig_r;
 	wire				o_full;
 	wire				o_empty;
 
@@ -39,7 +39,7 @@ module tb_ram_cc2p;
 		.i_data		(	i_data		),
 
 		.o_data		(	o_data		),
-		.o_sig		(	o_sig		),
+		.o_sig_r	(	o_sig_r		),
 		.o_full		(	o_full		),
 		.o_empty	(	o_empty		)
 	);
