@@ -1,5 +1,5 @@
 /*
- * https://docs.amd.com/r/en-US/ug901-vivado-synthesis/Block-RAM-Read/Write-Synchronization-Modes
+ * https://docs.amd.com/r/en-US/ug901-vivado-synthesis/Dual-Port-RAM-with-Asynchronous-Read-Coding-Verilog-Example
  * retrieved on Sep. 24, 2024
  *
  * Dual-Port RAM with Asynchronous Read (Distributed RAM)
@@ -8,26 +8,25 @@
 
 module rams_dist #(
 	parameter	D_WIDTH	= 128,
-	parameter	A_WIDTH	= 3
+	parameter	A_WIDTH	= 16
 )(
 	input						clk,
 	input						we,
 	input		[A_WIDTH-1:0]	a,
 	input		[A_WIDTH-1:0]	dpra,
 	input		[D_WIDTH-1:0]	di,
-	output		[D_WIDTH-1:0]	spo,
-	output		[D_WIDTH-1:0]	dpra
+	output	reg	[D_WIDTH-1:0]	spo,
+	output	reg	[D_WIDTH-1:0]	dpo
 );
 
 	reg		[D_WIDTH-1:0] ram [0:2**A_WIDTH-1];
-	
+
 	always @(posedge clk) begin
 		if (we)
 			ram[a] <= di;
+		spo <= ram[a];
+		dpo <= ram[dpra];
 	end
-	
-	assign spo = ram[a];
-	assign dpo = ram[dpra];
 
 endmodule
 
