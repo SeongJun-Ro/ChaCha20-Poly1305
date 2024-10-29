@@ -24,8 +24,6 @@ module p_tag (
 	parameter DONE	= 3'd7;
 	// clamp for i_key_r
 	parameter CLAMP 	= 128'h0ffffffc_0ffffffc_0ffffffc_0fffffff;
-	// concate 0x01 | i_msg
-	parameter CONCAT	= 134'h00_00000000_00000000_00000000_00000001;
 
 	reg		[2:0]	r_fsm;
 	reg		[31:0]	r_cnt;
@@ -52,13 +50,15 @@ module p_tag (
 	assign	w_key_s1	= i_key_s[63:32];
 	assign	w_key_s2	= i_key_s[95:64];
 	assign	w_key_s3	= i_key_s[127:96];
-	// 
+	// length means bytes, and to convert bytes to bits, multiply by 8.
+	// and shift the remaining length to add 0x01 at the end of the message.
 	assign	w_msg_exp	= (r_len_msg<65'd16) ? (1'b1 << {r_len_msg,3'd0}) + r_msg : {8'h01,r_msg};
-	// 
+	// ChaCha20-Poly1305 aead only handles data that is a multiple of 16 bytes.
+//	assign	w_msg_exp	= {8'h01,r_msg};
+	// 0 if r_len_msg is 0, 1 otherwise
 	assign	w_msg_state	= r_len_msg!=65'd0;
-	// 
-	assign	w_msg_start	= ((r_fsm == WAIT) && (i_en_msg));
-	// 
+	// w_msg_state is not 0, wait i_en_msg high
+	assign	w_msg_start	= ((r_fsm == WAIT) && i_en_msg);
 	assign	o_done		= (r_fsm == DONE);
 
 ////////////////////////////////////////////////////////////////////////////////
