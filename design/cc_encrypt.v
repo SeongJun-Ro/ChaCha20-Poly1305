@@ -138,10 +138,10 @@ module cc_encrypt (
 			o_busy	<= 1'd0;
 		else if (i_start)
 			o_busy	<= 1'd1;
-		else if (o_done)
+		else if (r_fsm == DONE)
 			o_busy	<= 1'd0;
-		else
-			o_busy	<= o_busy;
+//		else
+//			o_busy	<= o_busy;
 	end
 
 endmodule
